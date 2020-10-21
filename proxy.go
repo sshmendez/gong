@@ -50,10 +50,10 @@ func buildMux(config MuxConfig) http.ServeMux{
 	proxy := httputil.NewSingleHostReverseProxy(remote)
 
 
-	http.NewServeMux()
 	mux.HandleFunc("shanemendez.com/", func(res http.ResponseWriter, req *http.Request){
 		proxy.ServeHTTP(res,req)
 	})
+
 	return *mux
 }
 
@@ -63,7 +63,9 @@ func main(){
 	
 	
 
+	log.Print("Starting Server")
+
 	mux := buildMux(MuxConfig{})
-	log.Fatal(http.ListenAndServe(":9000", mux.ServeHTTP()))
+	log.Fatal(http.ListenAndServe(":9000", &mux))
 	
 }
