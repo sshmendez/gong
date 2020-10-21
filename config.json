@@ -1,0 +1,22 @@
+{
+    "hosts": [
+        {
+            "host": "http://api.zekestormproductions.com",
+            "type": {
+                "name": "ReverseProxy",
+                "port": 3000
+            },
+            "tls":{
+                "cert": "pathtocert",
+                "key": "pathtokey"
+            }
+        },
+        {
+            "host": "http://zekestormproductions.com",
+            "type": {
+                "name": "FileServer",
+                "root": "/var/www/zekestormproductions.com"
+            }
+        }
+    ]
+}
