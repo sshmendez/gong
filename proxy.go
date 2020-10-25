@@ -52,7 +52,6 @@ func (h RegexpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 type Handler = func(res http.ResponseWriter, req *http.Request)
 
-
 type Service struct{
 	Host string
 	Port int
@@ -69,6 +68,7 @@ type GenericHostConfig struct {
 type HostConfig struct {
 	Hostname string
 	ServerType string
+	GenericHostConfig
 }
 
 type ReverseProxy struct{
@@ -84,36 +84,57 @@ type FileServer struct{
 }
 
 
-func parseHosts(v map[string][]map[string]interface{}) *MuxConfig{
-	muxconf := &MuxConfig{}
+func parseHosts(v map[string][]interface{}, muxconf *MuxConfig) *MuxConfig{
 	for _, val := range v["hosts"]{
-		conf := parseHost(&GenericHostConfig{val})
-		muxconf.hosts = append(muxconf.hosts, conf)
+		hostconfig := HostConfig{}
+		hostconfig.apply(&GenericHostConfig{
+			val.(map[string]interface{})}, )
+		muxconf.hosts = append(muxconf.hosts, hostconfig)
 	}
 	return muxconf
 }
 
-func parseHost(v *GenericHostConfig) HostConfig{
-	var hostconfig HostConfig
-	
-	hostconfig.apply(v)
-
-	return hostconfig
-
-
-}
 ///////////////////////////////////////////////
 
 
-func (hc *HostConfig) apply(gc *GenericHostConfig) GenericHostConfig{
+func (hc *HostConfig) apply(gc *GenericHostConfig){
 	hc.Hostname, _ = gc.config["hostname"].(string)
 	hc.ServerType = gc.config["type"].(string)
-
+	hc.config = gc.config
 	delete(gc.config,"hostname")
 	delete(gc.config,"type")
 
-	return *gc
 }
+
+func (hc *HostConfig) execute(){
+
+}
+
+
+///////////////////////////////////////////////
+
+
+func (rp *ReverseProxy) apply(hc *GenericHostConfig){
+	rp.Port = hc.config["port"].(int)
+}
+
+func (rp *ReverseProxy) execute(){
+	
+}
+
+///////////////////////////////////////////////
+
+
+
+
+
+
+
+
+
+
+
+
 
 ///////////////////////////////////////////////
 func buildMux(config MuxConfig) *http.ServeMux{
@@ -137,14 +158,14 @@ func main(){
 	// config.Read(confbytes)
 	// fmt.Println(confbytes)
 
-	var v map[string][]map[string]interface{}
+	var v map[string][]interface{}
 	decoder := json.NewDecoder(config)
 	decoder.Decode(&v)
 
 	// hostconf := &GenericHostConfig{v["hosts"][0].(map[string]interface{})}
 
-	
-	muxconf := parseHosts(v)
+	muxconf := MuxConfig{}
+	parseHosts(v, &muxconf)
 
 	fmt.Println(muxconf)
 
