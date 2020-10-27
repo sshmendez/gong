@@ -1,21 +1,16 @@
 {
     "hosts": [
         {
-            "hostname": "hostname.com",
+            "hostname": "api.zekestormproductions.com",
+            "path": "/",
             "type": "ReverseProxy",
             "config": {
                 "port": 3000,
+                "remote": "localhost",
                 "tls": {
                     "cert": "pathtocert",
                     "key": "pathtokey"
                 }
-            }
-        },
-        {
-            "hostname": "zekestormproductions.com",
-            "type": "FileServer",
-            "config":{
-                "root": "/var/www/zekestormproductions.com"
             }
         }
     ]

@@ -2,6 +2,7 @@ package main
 
 import (
 	// "os"
+	"strconv"
 	"regexp"
 	"log"
 	"fmt"
@@ -50,12 +51,10 @@ func (h RegexpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 
 
-type Handler = func(res http.ResponseWriter, req *http.Request)
-
+type Handler = http.Handler
 
 type MuxConfig struct {
 	hosts []HostConfig
-	handlers map[string]Handler
 }
 
 type GenericHostConfig struct {
@@ -64,13 +63,14 @@ type GenericHostConfig struct {
 type HostConfig struct {
 	Hostname string
 	ServerType string
+	Path string
 	GenericHostConfig
 }
 
 type ReverseProxy struct{
 	HostConfig
 	Port int
-	Server *httputil.ReverseProxy
+	Remote string
 
 }
 
@@ -81,17 +81,12 @@ type FileServer struct{
 }
 
 
-func BuildMuxConfig(v map[string][]interface{}, muxconf *MuxConfig) *MuxConfig{
+func (muxconf *MuxConfig) BuildMuxConfig(v map[string][]interface{}) *MuxConfig{
 	for _, val := range v["hosts"]{
 		hostconfig := HostConfig{}
 		hostconfig.Apply(&GenericHostConfig{
 			val.(map[string]interface{})}, )
 		
-		handler := GetHandler(&hostconfig)
-		if handler == nil{
-			continue
-		} 
-		muxconf.handlers[hostconfig.Hostname] = handler
 		muxconf.hosts = append(muxconf.hosts, hostconfig)
 	}
 	return muxconf
@@ -106,7 +101,7 @@ func GetHandler(hc *HostConfig) Handler{
 	case "ReverseProxy":
 		rp := ReverseProxy{}
 		rp.Apply(hc)
-		server = rp.ServeHTTP
+		server = rp.Build()
 	default:
 		
 	}
@@ -119,19 +114,27 @@ func GetHandler(hc *HostConfig) Handler{
 
 
 func (hc *HostConfig) Apply(gc *GenericHostConfig){
+
 	hc.Hostname, _ = gc.config["hostname"].(string)
 	hc.ServerType = gc.config["type"].(string)
+	hc.Path = gc.config["path"].(string)
 	hc.config = gc.config
+
+	delete(gc.config, "path")
 	delete(gc.config,"hostname")
 	delete(gc.config,"type")
 
 }
 
-func (hc *HostConfig) Build(){
+func (hc *HostConfig) Build() Handler{
+	echoserver := RegexpHandler{}
 
-}
-func (hc *HostConfig) ServeHTTP(){
+	echoserver.HandleFunc(regexp.MustCompile(hc.Hostname+"/.*"), func(res http.ResponseWriter, req *http.Request){
+		fmt.Fprint(res, req.URL.String())
+	})
+	
 
+	return echoserver
 }
 
 
@@ -142,20 +145,26 @@ func (rp *ReverseProxy) Apply(hc *HostConfig) *ReverseProxy{
 	config := hc.config["config"].(map[string]interface{})
 	rp.Port = int(config["port"].(float64))
 
+	remote := config["remote"]
+	if remote == nil{
+		remote = hc.Hostname
+	}
+
+	rp.Remote = remote.(string)
+
 	delete(config,"port")
+	delete(config, "remote")
 
 	return rp
 }
 
-func (rp ReverseProxy) Build(){
-	host,_ := url.Parse(fmt.Sprint(rp.Hostname,":",rp.Port))
-	rp.Server = httputil.NewSingleHostReverseProxy(host)
+func (rp *ReverseProxy) Build() Handler{
 	
+	host,_ := url.Parse(fmt.Sprintf("http://%s:%s/%s",rp.Remote, strconv.Itoa(rp.Port), rp.Path))
+	host, _ = url.Parse("http://shanemendez.com")
+	return  httputil.NewSingleHostReverseProxy(host)
 }
-func (rp *ReverseProxy) ServeHTTP(res http.ResponseWriter, req *http.Request){
-	fmt.Println("calling handler!")
-	rp.Server.ServeHTTP(res,req)
-}
+
 
 ///////////////////////////////////////////////
 
@@ -167,17 +176,24 @@ func (rp *ReverseProxy) ServeHTTP(res http.ResponseWriter, req *http.Request){
 
 
 ///////////////////////////////////////////////
+
 func buildMux(muxconf MuxConfig) *http.ServeMux{
 	mux := http.NewServeMux()
 
-	for hostname, handler := range muxconf.handlers {
-		log.Println("Adding :", hostname)
-		mux.HandleFunc("shanemendez.com", handler)
+	for i := range muxconf.hosts {
+		host := muxconf.hosts[i]
+		handler := GetHandler(&host)
+		if handler == nil{
+			continue
+		}
+		log.Println("Adding :", host.Hostname)
+		mux.Handle("shanemendez.com/", handler)
 	}
 
 
 	return mux
 }
+
 
 func main(){
 
@@ -193,10 +209,10 @@ func main(){
 	// hostconf := &GenericHostConfig{v["hosts"][0].(map[string]interface{})}
 
 	muxconf := MuxConfig{}
-	muxconf.handlers = make(map[string]Handler)
 
-	BuildMuxConfig(v, &muxconf)
-	buildMux(muxconf)
+	muxconf.BuildMuxConfig(v)
+
+	fmt.Println(muxconf.hosts)
 
 
 
@@ -215,7 +231,7 @@ func main(){
 
 	}()
 
-	mux := buildMux(MuxConfig{})
+	mux := buildMux(muxconf)
 	log.Fatal(http.ListenAndServe(":9000", mux))
 	log.Print("Starting Server")
 
