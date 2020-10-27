@@ -52,14 +52,10 @@ func (h RegexpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 type Handler = func(res http.ResponseWriter, req *http.Request)
 
-type Service struct{
-	Host string
-	Port int
-	Handlers []Handler
-}
 
 type MuxConfig struct {
 	hosts []HostConfig
+	handlers map[string]Handler
 }
 
 type GenericHostConfig struct {
@@ -74,6 +70,7 @@ type HostConfig struct {
 type ReverseProxy struct{
 	HostConfig
 	Port int
+	Server *httputil.ReverseProxy
 
 }
 
@@ -84,20 +81,44 @@ type FileServer struct{
 }
 
 
-func parseHosts(v map[string][]interface{}, muxconf *MuxConfig) *MuxConfig{
+func BuildMuxConfig(v map[string][]interface{}, muxconf *MuxConfig) *MuxConfig{
 	for _, val := range v["hosts"]{
 		hostconfig := HostConfig{}
-		hostconfig.apply(&GenericHostConfig{
+		hostconfig.Apply(&GenericHostConfig{
 			val.(map[string]interface{})}, )
+		
+		handler := GetHandler(&hostconfig)
+		if handler == nil{
+			continue
+		} 
+		muxconf.handlers[hostconfig.Hostname] = handler
 		muxconf.hosts = append(muxconf.hosts, hostconfig)
 	}
 	return muxconf
 }
+///////////////////////////////////////////////
+
+
+func GetHandler(hc *HostConfig) Handler{
+	var server Handler
+
+	switch hc.ServerType {
+	case "ReverseProxy":
+		rp := ReverseProxy{}
+		rp.Apply(hc)
+		server = rp.ServeHTTP
+	default:
+		
+	}
+
+	return server
+}
+
 
 ///////////////////////////////////////////////
 
 
-func (hc *HostConfig) apply(gc *GenericHostConfig){
+func (hc *HostConfig) Apply(gc *GenericHostConfig){
 	hc.Hostname, _ = gc.config["hostname"].(string)
 	hc.ServerType = gc.config["type"].(string)
 	hc.config = gc.config
@@ -106,7 +127,10 @@ func (hc *HostConfig) apply(gc *GenericHostConfig){
 
 }
 
-func (hc *HostConfig) execute(){
+func (hc *HostConfig) Build(){
+
+}
+func (hc *HostConfig) ServeHTTP(){
 
 }
 
@@ -114,13 +138,24 @@ func (hc *HostConfig) execute(){
 ///////////////////////////////////////////////
 
 
-func (rp *ReverseProxy) apply(hc *GenericHostConfig){
-	rp.Port = hc.config["port"].(int)
+func (rp *ReverseProxy) Apply(hc *HostConfig) *ReverseProxy{
+	config := hc.config["config"].(map[string]interface{})
+	rp.Port = int(config["port"].(float64))
+
+	delete(config,"port")
+
+	return rp
 }
 
-func (rp *ReverseProxy) execute(){
+func (rp ReverseProxy) Build(){
+	host,_ := url.Parse(fmt.Sprint(rp.Hostname,":",rp.Port))
+	rp.Server = httputil.NewSingleHostReverseProxy(host)
 	
 }
+func (rp *ReverseProxy) ServeHTTP(res http.ResponseWriter, req *http.Request){
+	fmt.Println("calling handler!")
+	rp.Server.ServeHTTP(res,req)
+}
 
 ///////////////////////////////////////////////
 
@@ -131,22 +166,15 @@ func (rp *ReverseProxy) execute(){
 
 
 
-
-
-
-
-
 ///////////////////////////////////////////////
-func buildMux(config MuxConfig) *http.ServeMux{
+func buildMux(muxconf MuxConfig) *http.ServeMux{
 	mux := http.NewServeMux()
-	remote, _ := url.Parse("http://localhost:3000")
-	proxy := httputil.NewSingleHostReverseProxy(remote)
 
+	for hostname, handler := range muxconf.handlers {
+		log.Println("Adding :", hostname)
+		mux.HandleFunc("shanemendez.com", handler)
+	}
 
-
-	mux.HandleFunc("shanemendez.com/", func(res http.ResponseWriter, req *http.Request){
-		proxy.ServeHTTP(res,req)
-	})
 
 	return mux
 }
@@ -165,13 +193,14 @@ func main(){
 	// hostconf := &GenericHostConfig{v["hosts"][0].(map[string]interface{})}
 
 	muxconf := MuxConfig{}
-	parseHosts(v, &muxconf)
+	muxconf.handlers = make(map[string]Handler)
 
-	fmt.Println(muxconf)
+	BuildMuxConfig(v, &muxconf)
+	buildMux(muxconf)
+
+
 
 	
-
-	return
 	go func(){
 
 		echoserver := RegexpHandler{}
@@ -186,10 +215,10 @@ func main(){
 
 	}()
 
-	log.Print("Starting Server")
-
 	mux := buildMux(MuxConfig{})
 	log.Fatal(http.ListenAndServe(":9000", mux))
+	log.Print("Starting Server")
+
 	
 
 }
