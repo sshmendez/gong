@@ -1,6 +1,19 @@
 {
     "hosts": [
         {
+            "hostname": "shanemendez.com",
+            "path": "/",
+            "type": "ReverseProxy",
+            "config": {
+                "port": 3000,
+                "remote": "localhost",
+                "tls": {
+                    "cert": "pathtocert",
+                    "key": "pathtokey"
+                }
+            }
+        },
+        {
             "hostname": "api.zekestormproductions.com",
             "path": "/",
             "type": "ReverseProxy",

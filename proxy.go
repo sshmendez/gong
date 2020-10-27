@@ -160,8 +160,8 @@ func (rp *ReverseProxy) Apply(hc *HostConfig) *ReverseProxy{
 
 func (rp *ReverseProxy) Build() Handler{
 	
-	host,_ := url.Parse(fmt.Sprintf("http://%s:%s/%s",rp.Remote, strconv.Itoa(rp.Port), rp.Path))
-	host, _ = url.Parse("http://shanemendez.com")
+	host,_ := url.Parse(fmt.Sprintf("http://%s:%s",rp.Remote, strconv.Itoa(rp.Port)))
+	// host, _ = url.Parse("http://shanemendez.com")
 	return  httputil.NewSingleHostReverseProxy(host)
 }
 
@@ -187,7 +187,7 @@ func buildMux(muxconf MuxConfig) *http.ServeMux{
 			continue
 		}
 		log.Println("Adding :", host.Hostname)
-		mux.Handle("shanemendez.com/", handler)
+		mux.Handle(host.Hostname+host.Path, handler)
 	}
 
 
