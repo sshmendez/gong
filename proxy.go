@@ -82,29 +82,30 @@ func CorsServer(port int){
 type Handler = http.Handler
 
 type MuxConfig struct {
-	hosts []HostConfig
+	hosts map[string]GenericHostConfig
 	handlers map[string]Handler
 }
 
 type GenericHostConfig struct {
-	config map[string]interface{}
-}
-type HostConfig struct {
 	Hostname string
 	ServerType string
 	Path string
-	GenericHostConfig
+	config map[string]interface{}
+}
+type HostConfig interface {
+	Build() (Handler, error)
+	Apply(*GenericHostConfig) (HostConfig)
 }
 
 type ReverseProxy struct{
-	HostConfig
+	GenericHostConfig
 	Port int
 	Remote string
 
 }
 
 type FileServer struct{
-	HostConfig
+	GenericHostConfig
 	Root string
 	Index string
 }
@@ -114,13 +115,16 @@ func (muxconf *MuxConfig) BuildMuxConfig(v map[string][]interface{}) *MuxConfig{
 	if muxconf.handlers == nil{
 		muxconf.handlers = map[string]Handler{}
 	}
+	if muxconf.hosts == nil{
+		muxconf.hosts = map[string]GenericHostConfig{}
+	}
 	for _, val := range v["hosts"]{
-		hostconfig := HostConfig{}
-		hostconfig.Apply(&GenericHostConfig{
-			val.(map[string]interface{})}, )
-
+		genericconf := GenericHostConfig{}
 		
-		muxconf.AddHost(&hostconfig)
+		serverconf := genericconf.Apply(val.(map[string]interface{}))
+		
+		
+		muxconf.Add(&genericconf, *serverconf)
 	}
 	return muxconf
 }
@@ -128,19 +132,24 @@ func (muxconf *MuxConfig) BuildMuxConfig(v map[string][]interface{}) *MuxConfig{
 ///////////////////////////////////////////////
 
 
-func (muxconf *MuxConfig) Add(host *HostConfig, handler Handler) error{
-	muxconf.hosts = append(muxconf.hosts, *host)
+func (muxconf *MuxConfig) Add(host *GenericHostConfig, hc HostConfig) error{
+	handler, err := hc.Build()
+	if err != nil{
+
+	}
+
+	muxconf.hosts[host.Hostname] = *host
 	muxconf.handlers[host.Hostname] = handler
 	return nil
 }
 
-func (muxconf *MuxConfig) AddHost(host *HostConfig) error{
-	handler, err := host.Build()
-	if err != nil{
-		return err
-	}
-	return muxconf.Add(host, handler)
-}
+// func (muxconf *MuxConfig) AddHost(host *GenericHostConfig) error{
+// 	handler, err := host.Build()
+// 	if err != nil{
+// 		return err
+// 	}
+// 	return muxconf.Add(host, handler)
+// }
 
 
 ///////////////////////////////////////////////
@@ -150,39 +159,53 @@ func (muxconf *MuxConfig) AddHost(host *HostConfig) error{
 
 ///////////////////////////////////////////////
 
-func (hc *HostConfig) Build() (Handler, error){
-	var server Handler
+func (hc *GenericHostConfig) Resolve() (*HostConfig, error){
+	var config HostConfig
 	var err error
 	switch hc.ServerType {
 	case "ReverseProxy":
-		rp := ReverseProxy{}
-		rp.Apply(hc)
-		server, err = rp.Build()
+		config = &ReverseProxy{}
+	case "FileServer":
+		config = &FileServer{}
 	default:
 		err = errors.New("Handler could not be constructed")
 	}
 
+	return &config, err
+}
+func (hc *GenericHostConfig) Build() (Handler, error){
+	var server Handler
+	var err error	
+
 	return server, err
 }
 
-func (hc *HostConfig) Apply(gc *GenericHostConfig){
+func (hc *GenericHostConfig) Apply(gc map[string]interface{}) *HostConfig{
 
-	hc.Hostname, _ = gc.config["hostname"].(string)
-	hc.ServerType = gc.config["type"].(string)
-	hc.Path = gc.config["path"].(string)
-	hc.config = gc.config
+	config := gc
+	hc.Hostname, _ = config["hostname"].(string)
+	hc.ServerType = config["type"].(string)
+	hc.Path = config["path"].(string)
+	hc.config = config
 
-	delete(gc.config, "path")
-	delete(gc.config,"hostname")
-	delete(gc.config,"type")
+	serverconf,err := hc.Resolve()
+	
+	if err == nil{}
 
+
+
+	delete(config, "path")
+	delete(config,"hostname")
+	delete(config,"type")
+
+	return serverconf
 }
 
 
 ///////////////////////////////////////////////
 
 
-func (rp *ReverseProxy) Apply(hc *HostConfig) *ReverseProxy{
+func (rp *ReverseProxy) Apply(hc *GenericHostConfig) HostConfig{
 	config := hc.config["config"].(map[string]interface{})
 	rp.Port = int(config["port"].(float64))
 
@@ -211,10 +234,27 @@ func (rp *ReverseProxy) Build() (Handler, error){
 
 
 
+func (fs *FileServer) Apply(hc *GenericHostConfig) HostConfig{
+	config := hc.config["config"].(map[string]interface{})
+	fmt.Println(hc)
+	fs.Root = config["root"].(string)
+	index := config["index"]
+
+	if index == nil{
+		index = ""
+	}
+	fs.Index = index.(string)
+
+	delete(config, "index")
+	delete(config, "root")
+
+	return fs
+}
 
 
-
-
+func (fs *FileServer) Build() (Handler, error){
+	return http.FileServer(http.Dir(fs.Root)),nil
+}
 
 ///////////////////////////////////////////////
 
@@ -225,14 +265,16 @@ func buildMux(muxconf MuxConfig) *http.ServeMux{
 		host := muxconf.hosts[i]
 		handler := muxconf.handlers[host.Hostname]
 		log.Println("Adding :", host.Hostname)
-		mux.Handle(host.Hostname+"/", handler)
+		mux.HandleFunc(host.Hostname+"/", func(res http.ResponseWriter, req *http.Request){
+			log.Println(fmt.Sprintf("Calling %s", host.Hostname))
+			handler.ServeHTTP(res,req)
+		})
 	}
 
 
 	return mux
 }
 //////////////////////////////////////////////////
-
 
 
 func main(){
@@ -254,6 +296,12 @@ func main(){
 	go CorsServer(3001)
 	go EchoServer(3002)
 
+	host := muxconf.hosts["shanemendez.com"]
+	handler,err  := host.Build()
+	if err == nil{
+
+	}
+	go http.ListenAndServe(":3003", handler)
 	mux := buildMux(muxconf)
 	log.Fatal(http.ListenAndServe(":9000", mux))
 	log.Print("Starting Server")

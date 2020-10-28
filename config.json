@@ -3,14 +3,9 @@
         {
             "hostname": "shanemendez.com",
             "path": "/",
-            "type": "ReverseProxy",
+            "type": "FileServer",
             "config": {
-                "port": 3001,
-                "remote": "localhost",
-                "tls": {
-                    "cert": "pathtocert",
-                    "key": "pathtokey"
-                }
+                "root": "/usr/share/doc"
             }
         },
         {
