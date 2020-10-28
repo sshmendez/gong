@@ -5,7 +5,7 @@
             "path": "/",
             "type": "ReverseProxy",
             "config": {
-                "port": 3000,
+                "port": 3001,
                 "remote": "localhost",
                 "tls": {
                     "cert": "pathtocert",
