@@ -94,7 +94,7 @@ type GenericHostConfig struct {
 }
 type HostConfig interface {
 	Build() (Handler, error)
-	Apply(*GenericHostConfig) (HostConfig)
+	Apply(*GenericHostConfig) HostConfig
 }
 
 type ReverseProxy struct{
@@ -118,13 +118,15 @@ func (muxconf *MuxConfig) BuildMuxConfig(v map[string][]interface{}) *MuxConfig{
 	if muxconf.hosts == nil{
 		muxconf.hosts = map[string]GenericHostConfig{}
 	}
-	for _, val := range v["hosts"]{
-		genericconf := GenericHostConfig{}
+	for _, val := range v["hosts"]{		
+		genericconf := NewGenericConfig(val.(map[string]interface{}))
+		serverconf, err := genericconf.Resolve()
+		if  err != nil{
+
+		}
 		
-		serverconf := genericconf.Apply(val.(map[string]interface{}))
-		
-		
-		muxconf.Add(&genericconf, *serverconf)
+
+		muxconf.Add(&genericconf, serverconf)
 	}
 	return muxconf
 }
@@ -159,19 +161,20 @@ func (muxconf *MuxConfig) Add(host *GenericHostConfig, hc HostConfig) error{
 
 ///////////////////////////////////////////////
 
-func (hc *GenericHostConfig) Resolve() (*HostConfig, error){
-	var config HostConfig
+
+func (hc *GenericHostConfig) Resolve() (HostConfig, error){
 	var err error
+	var config HostConfig
 	switch hc.ServerType {
 	case "ReverseProxy":
-		config = &ReverseProxy{}
+		return ReverseProxy{}.Apply(hc), nil
 	case "FileServer":
-		config = &FileServer{}
+		return FileServer{}.Apply(hc), nil
 	default:
 		err = errors.New("Handler could not be constructed")
 	}
 
-	return &config, err
+	return config, err
 }
 func (hc *GenericHostConfig) Build() (Handler, error){
 	var server Handler
@@ -179,33 +182,21 @@ func (hc *GenericHostConfig) Build() (Handler, error){
 
 	return server, err
 }
-
-func (hc *GenericHostConfig) Apply(gc map[string]interface{}) *HostConfig{
-
+func NewGenericConfig (gc map[string]interface{}) GenericHostConfig{
+	hc := GenericHostConfig{}
 	config := gc
 	hc.Hostname, _ = config["hostname"].(string)
 	hc.ServerType = config["type"].(string)
 	hc.Path = config["path"].(string)
 	hc.config = config
 
-	serverconf,err := hc.Resolve()
 	
-	if err == nil{}
-
-
-
-	delete(config, "path")
-	delete(config,"hostname")
-	delete(config,"type")
-
-	return serverconf
+	return hc
 }
-
-
 ///////////////////////////////////////////////
 
 
-func (rp *ReverseProxy) Apply(hc *GenericHostConfig) HostConfig{
+func (rp ReverseProxy) Apply(hc *GenericHostConfig) HostConfig{
 	config := hc.config["config"].(map[string]interface{})
 	rp.Port = int(config["port"].(float64))
 
@@ -216,15 +207,14 @@ func (rp *ReverseProxy) Apply(hc *GenericHostConfig) HostConfig{
 
 	rp.Remote = remote.(string)
 
-	delete(config,"port")
-	delete(config, "remote")
-
 	return rp
 }
 
-func (rp *ReverseProxy) Build() (Handler, error){
+func (rp ReverseProxy) Build() (Handler, error){
 	
-	host,_ := url.Parse(fmt.Sprintf("http://%s:%s",rp.Remote, strconv.Itoa(rp.Port)))
+	surl := fmt.Sprintf("http://%s:%s",rp.Remote, strconv.Itoa(rp.Port))
+	fmt.Println(surl)
+	host,_ := url.Parse(surl)
 
 	return  httputil.NewSingleHostReverseProxy(host), nil
 }
@@ -234,7 +224,7 @@ func (rp *ReverseProxy) Build() (Handler, error){
 
 
 
-func (fs *FileServer) Apply(hc *GenericHostConfig) HostConfig{
+func (fs FileServer) Apply(hc *GenericHostConfig) HostConfig{
 	config := hc.config["config"].(map[string]interface{})
 	fmt.Println(hc)
 	fs.Root = config["root"].(string)
@@ -245,14 +235,12 @@ func (fs *FileServer) Apply(hc *GenericHostConfig) HostConfig{
 	}
 	fs.Index = index.(string)
 
-	delete(config, "index")
-	delete(config, "root")
-
 	return fs
 }
 
 
-func (fs *FileServer) Build() (Handler, error){
+func (fs FileServer) Build() (Handler, error){
+	fmt.Println("root is",fs.Root)
 	return http.FileServer(http.Dir(fs.Root)),nil
 }
 
@@ -296,12 +284,8 @@ func main(){
 	go CorsServer(3001)
 	go EchoServer(3002)
 
-	host := muxconf.hosts["shanemendez.com"]
-	handler,err  := host.Build()
-	if err == nil{
 
-	}
-	go http.ListenAndServe(":3003", handler)
+
 	mux := buildMux(muxconf)
 	log.Fatal(http.ListenAndServe(":9000", mux))
 	log.Print("Starting Server")
