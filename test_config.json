@@ -15,11 +15,7 @@
             "type": "ReverseProxy",
             "config": {
                 "port": 3002,
-                "remote": "localhost",
-                "tls": {
-                    "cert": "pathtocert",
-                    "key": "pathtokey"
-                }
+                "remote": "localhost"
             }
         }
     ]
