@@ -1,8 +1,8 @@
 {
-    "port": 8080,
+    "port": 9999,
     "hosts": [
         {
-            "hostname": "shanemendez.com",
+            "hostname": "test.com",
             "path": "/",
             "type": "FileServer",
             "config": {
