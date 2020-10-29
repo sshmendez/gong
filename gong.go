@@ -56,7 +56,7 @@ func (muxconf *MuxConfig) BuildMuxConfig(v map[string]interface{}) *MuxConfig{
 	if muxconf.hosts == nil{
 		muxconf.hosts = map[string]GenericHostConfig{}
 	}
-	muxconf.port = int(v["port"].(float64))
+	muxconf.Port = int(v["port"].(float64))
 	
 	for _, val := range v["hosts"].([]interface{}){		
 		genericconf := NewGenericConfig(val.(map[string]interface{}))
