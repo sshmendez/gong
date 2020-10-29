@@ -19,7 +19,7 @@ import (
 type Handler = http.Handler
 
 type MuxConfig struct {
-	port int
+	Port int
 	hosts map[string]GenericHostConfig
 	handlers map[string]Handler
 }
@@ -110,6 +110,7 @@ func BuildMuxConfigFromFile(filename string) (MuxConfig, error) {
 
 	return muxconf, nil
 }
+
 ///////////////////////////////////////////////
 
 
@@ -222,3 +223,4 @@ func (fs FileServer) Build() (Handler, error){
 ///////////////////////////////////////////////
 
 //////////////////////////////////////////////////
+
