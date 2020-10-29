@@ -4,7 +4,7 @@ import (
 	"testing"
 	"net/http"
 	"net/http/httptest"
-	"sabbo/gong/servers"
+	"github.com/sshmendez/gong/servers"
 )
 
 
