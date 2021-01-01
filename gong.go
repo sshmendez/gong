@@ -44,6 +44,8 @@ func AddEndPoint(mux *http.ServeMux) func(GenericHostConfig, http.Handler){
 }
 func BuildMux(muxconf MuxConfig) *http.ServeMux {
 	mux := http.NewServeMux()
+	fmt.Println("Building Mux")
+	fmt.Println(muxconf)
 	muxconf.Map(AddEndPoint(mux))
 	return mux
 }
