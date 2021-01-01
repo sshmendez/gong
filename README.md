@@ -10,7 +10,7 @@ Create files servers and reverse proxies from a straight forward json configurat
 
 GONG config has two top level parameters: `port` and `hosts`. `port` tells GONG where to serve the mux and `hosts` is a list of *host configurations*
 
-A host config has four sections: `hostname`, `path`, `type`, `config`
+A host config has four parameters: `hostname`, `path`, `type`, `config`
 
 
 ## hostname, types
